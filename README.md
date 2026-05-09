@@ -1,5 +1,5 @@
 # EX.1  Pole Balancing using Reinforcement Learning
-## Date:
+## Date:09/05/2026
 
 ## Aim
 The aim of this project is to develop a Reinforcement Learning agent that learns to balance a pole on a moving cart by interacting with the environment and maximizing cumulative rewards.
