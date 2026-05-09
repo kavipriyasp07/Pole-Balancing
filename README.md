@@ -56,88 +56,90 @@ Name: KAVIPRIYA SP
 Reg:2305002011
 ```
 ```python
-#GridWorld
+#Pole Balancing
 
 import numpy as np
+import gymnasium as gym
 
-# Grid size (rectangular)
-rows, cols = 4, 5
+# Create environment (modern version)
+env = gym.make("CartPole-v1")
 
-gamma = 0.9      # discount factor
-theta = 1e-4     # convergence threshold
+# Discretization
+buckets = (1, 1, 6, 12)
+Q = np.zeros(buckets + (env.action_space.n,))
 
-# Rewards
-rewards = np.zeros((rows, cols))
-rewards[0, 4] = 1     # Goal
-rewards[1, 4] = -1    # Bad state
+# Hyperparameters
+alpha = 0.1
+gamma = 0.99
+epsilon = 1.0
+epsilon_decay = 0.995
+epsilon_min = 0.01
+episodes = 3000
 
-# Actions: Up, Down, Left, Right
-actions = [(-1,0), (1,0), (0,-1), (0,1)]
-action_symbols = ["↑", "↓", "←", "→"]
+# Discretize continuous state
+def discretize(obs):
+    upper = [2.4, 3.0, 0.2095, 3.5]
+    lower = [-2.4, -3.0, -0.2095, -3.5]
 
-# Initialize Value Function
-V = np.zeros((rows, cols))
+    ratios = [(obs[i] - lower[i]) / (upper[i] - lower[i]) for i in range(len(obs))]
+    new_obs = [int(r * (buckets[i] - 1)) for i, r in enumerate(ratios)]
+    new_obs = [min(buckets[i] - 1, max(0, new_obs[i])) for i in range(len(obs))]
 
-def is_valid(r, c):
-    return 0 <= r < rows and 0 <= c < cols
+    return tuple(new_obs)
 
-# --- VALUE ITERATION ---
-while True:
-    delta = 0
-    new_V = np.copy(V)
+# --- TRAINING ---
+for ep in range(episodes):
+    obs, _ = env.reset()
+    state = discretize(obs)
+    done = False
 
-    for r in range(rows):
-        for c in range(cols):
-            values = []
+    while not done:
+        # ε-greedy policy
+        if np.random.rand() < epsilon:
+            action = env.action_space.sample()
+        else:
+            action = np.argmax(Q[state])
 
-            for a in actions:
-                nr, nc = r + a[0], c + a[1]
+        next_obs, reward, terminated, truncated, _ = env.step(action)
+        done = terminated or truncated
 
-                if not is_valid(nr, nc):
-                    nr, nc = r, c   # stay in same cell
+        # Slightly improved reward (optional but simple)
+        angle = next_obs[2]
+        reward = 1 - abs(angle)
 
-                reward = rewards[nr, nc]
-                values.append(reward + gamma * V[nr, nc])
+        next_state = discretize(next_obs)
 
-            best_value = max(values)
-            new_V[r, c] = best_value
+        # Q-learning update
+        Q[state][action] += alpha * (
+            reward + gamma * np.max(Q[next_state]) - Q[state][action]
+        )
 
-            delta = max(delta, abs(V[r, c] - best_value))
+        state = next_state
 
-    V = new_V
+    epsilon = max(epsilon_min, epsilon * epsilon_decay)
 
-    if delta < theta:
-        break
+    if ep % 500 == 0:
+        print(f"Episode {ep}, Epsilon: {epsilon:.3f}")
 
-# --- PRINT VALUE FUNCTION ---
-print("\nValue Function:\n")
-for row in V:
-    print(["{0:0.2f}".format(v) for v in row])
+print("Training Completed!")
 
 
-# --- EXTRACT POLICY ---
-policy = np.empty((rows, cols), dtype=str)
+# --- TESTING ---
+obs, _ = env.reset()
+done = False
+total_reward = 0
 
-for r in range(rows):
-    for c in range(cols):
-        action_values = []
+while not done:
+    state = discretize(obs)
+    action = np.argmax(Q[state])
 
-        for a in actions:
-            nr, nc = r + a[0], c + a[1]
+    obs, reward, terminated, truncated, _ = env.step(action)
+    done = terminated or truncated
 
-            if not is_valid(nr, nc):
-                nr, nc = r, c
+    total_reward += reward
 
-            reward = rewards[nr, nc]
-            action_values.append(reward + gamma * V[nr, nc])
-
-        best_action = np.argmax(action_values)
-        policy[r, c] = action_symbols[best_action]
-
-# --- PRINT POLICY ---
-print("\nPolicy:\n")
-for row in policy:
-    print(row)
+env.close()
+print("Test Reward:", total_reward)
 
 ```
 
